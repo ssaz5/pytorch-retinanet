@@ -6,12 +6,14 @@ import torch.utils.model_zoo as model_zoo
 from utils import BasicBlock, Bottleneck, BBoxTransform, ClipBoxes
 from anchors import Anchors
 import losses
-from lib.nms.pth_nms import pth_nms
+# from lib.nms.pth_nms import pth_nms
+from lib.nms.gpu_nms import gpu_nms
 
 def nms(dets, thresh):
     "Dispatch to either CPU or GPU NMS implementations.\
     Accept dets as tensor"""
-    return pth_nms(dets, thresh)
+#     return pth_nms(dets, thresh)
+    return gpu_nms(dets, thresh)
 
 model_urls = {
     'resnet18': 'https://download.pytorch.org/models/resnet18-5c106cde.pth',
@@ -149,7 +151,7 @@ class ClassificationModel(nn.Module):
         out = self.output(out)
         out = self.output_act(out)
 
-        # out is B x C x W x H, with C = n_classes + n_anchors
+        # out is B x C x W x H, with C = n_classes * n_anchors
         out1 = out.permute(0, 2, 3, 1)
 
         batch_size, width, height, channels = out1.shape
@@ -274,7 +276,7 @@ class ResNet(nn.Module):
             transformed_anchors = transformed_anchors[:, scores_over_thresh, :]
             scores = scores[:, scores_over_thresh, :]
 
-            anchors_nms_idx = nms(torch.cat([transformed_anchors, scores], dim=2)[0, :, :], 0.5)
+            anchors_nms_idx = nms(torch.cat([transformed_anchors, scores], dim=2)[0, :, :].cpu().numpy(), 0.5)
 
             nms_scores, nms_class = classification[0, anchors_nms_idx, :].max(dim=1)
 
